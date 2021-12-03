@@ -37,6 +37,7 @@ var hextechBalls;
 var shimmerBalls;
 var groupPtcHextechDestroy;
 var groupPtcShimmerDestroy;
+var bgColliders;
 // -------------------------------------
 
 // ------------ GAME OBJECTS -----------
@@ -54,6 +55,12 @@ var barHextech01;
 var barHextech02;
 var barShimmer01;
 var barShimmer02;
+var addOne;
+var bg;
+var bgCollider;
+var endPanel;
+var txtEndScore;
+var bgBlack;
 // -------------------------------------
 
 // ------------ TIMED EVENT ------------
@@ -66,6 +73,15 @@ var stopParticlesDestroyHextech;
 var reduceParticleAlphaDestroyHextech;
 var fillHextechBar;
 var fillShimmerBar;
+var increaseText;
+var decreaseText;
+var animateAddOne;
+var setupAddOne;
+var increaseTextScore;
+var decreaseTextScore;
+var approachBlock;
+var destroyParticlesEachTime;
+var increaseEndPanel;
 // -------------------------------------
 
 // ------------ PARTICLES --------------
@@ -83,6 +99,13 @@ var txtMun;
 var remainingMun;
 var valueHextechBar;
 var valueShimmerBar;
+var txtScore;
+var actualScore;
+var isTextScoreOnAnim;
+var numberRow;
+var rowRows;
+var bulletsInGame;
+var isEnd;
 // -------------------------------------
 
 // ===================================================
@@ -90,6 +113,12 @@ var valueShimmerBar;
 
 function preload ()
 {
+    // Background
+    this.load.image('bg', 'assets/images/BG.png');
+    this.load.image('bgCollider', 'assets/images/BGCollider.png');
+    this.load.image('endPanel', 'assets/images/EndPanel.png');
+    this.load.image('bgBlack', 'assets/images/BGBlack.png');
+
     // Cannon's assets
     this.load.spritesheet('cannon01', 'assets/images/Cannon01.png',
       { frameWidth: 78, frameHeight: 163 }
@@ -122,10 +151,12 @@ function preload ()
 
     // Audio
     this.load.audio('shoot', 'assets/audio/ShootCannon.wav');
-    this.load.audio('destroyHextech', 'assets/audio/DestroyHextech.wav');
-    this.load.audio('destroyShimmer', 'assets/audio/DestroyShimmer.wav');
-    this.load.audio('destroyBall', 'assets/audio/DestroyBall.wav');
+    this.load.audio('destroyHextech', 'assets/audio/DestroyHextech2.wav');
+    this.load.audio('destroyShimmer', 'assets/audio/DestroyShimmer2.wav');
+    this.load.audio('destroyBall', 'assets/audio/DestroyBall2.wav');
     this.load.audio('mainTheme', 'assets/audio/MainTheme.wav');
+    this.load.audio('addOneSong', 'assets/audio/AddOneSong.wav');
+    this.load.audio('laugh', 'assets/audio/Laugh.wav');
 
     // Bar's assets
     this.load.image('bar02', 'assets/images/Bar02.png');
@@ -137,12 +168,16 @@ function preload ()
     this.load.spritesheet('barShimmerSheet', 'assets/images/BarShimmerSheet.png',
       { frameWidth: 32, frameHeight: 128 }
     );
+    this.load.image('addOne', 'assets/images/AddOne.png');
 }
 
 
 function create ()
 {
   this.sound.play('mainTheme');
+  bg = this.add.image(450, 4500, 'bg');
+  bgColliders = this.physics.add.staticGroup();
+  bgCollider = bgColliders.create(450, 2800, 'bgCollider');
 
   // ================== INITIALIZE PARTICLES ===================
   var particlesHextech = this.add.particles('ptcHextechShoot');
@@ -169,6 +204,7 @@ function create ()
   this.input.on('pointerdown', function (pointer) {
     if(remainingMun > 0)
     {
+      bulletsInGame++;
       this.sound.play('shoot');
       cannon.anims.play('shooting', 5, true);
       rotateGear = this.time.addEvent({ delay: 50, callback: TRotateGear, callbackScope: this, repeat: 70});
@@ -188,6 +224,14 @@ function create ()
       }
     
       UpdateLoader();
+      LaughSinged(this);
+    }
+    else if(bulletsInGame == 0 && isEnd == false)
+    {
+      isEnd = true;
+      bgBlack.setVisible(true);
+      endPanel.setVisible(true);
+      increaseEndPanel = this.time.addEvent({ delay: 5, callback: TIncreaseEndPanel, callbackScope: this, repeat : 60});
     }
   }, this);
   // ===========================================================
@@ -200,8 +244,10 @@ function create ()
   // ================== BRICKS : Level Design ==================
   hextechBlocks = this.physics.add.staticGroup();
   shimmerBlocks = this.physics.add.staticGroup();
-  
+
   SetupLevelDesign();
+
+  numberRow = 0;
   // ===========================================================
 
 
@@ -232,6 +278,9 @@ function create ()
   this.physics.add.collider(shimmerBalls, shimmerBlocks, HitShimmer, null, this);
   this.physics.add.collider(shimmerBalls, hextechBlocks, FailShimmer, null, this);
 
+  this.physics.add.collider(bgCollider, hextechBalls);
+  this.physics.add.collider(bgCollider, shimmerBalls);
+
   // ================== ANIM : LOADER PANEL ==========================
   panelLoader = this.physics.add.sprite(150, 50, 'panelLoaderBullets');
 
@@ -258,7 +307,7 @@ function create ()
   loaderBallShimmer02 = this.add.image(140, 52, 'ballShimmer').setScale(0.5);
   loaderBallShimmer01 = this.add.image(200, 52, 'ballShimmer').setVisible(false);
 
-  remainingMun = 20;
+  remainingMun = 30;
   txtMun = this.add.text(100, 120, 'X ' + remainingMun, { fill: '#ffffff' });
   txtMun.align = 'center';
   txtMun.setFontSize(40);
@@ -297,13 +346,42 @@ function create ()
 
   valueHextechBar = 50;
   valueShimmerBar = 50;
+
+  addOne = this.add.image(210, 140, 'addOne');
+  addOne.setAlpha(0);
+  // ===========================================================
+
+
+  // ================== SCORE ==================================
+  actualScore = 0;
+  txtScore = this.add.text(740, 70, actualScore, { fill: '#ffffff' });
+  txtScore.align = 'center';
+  txtScore.setFontSize(40);
+  txtScore.setFontFamily('font1');
+  isTextScoreOnAnim = false;
+  // ===========================================================
+
+
+  // ================== END PANEL ==============================
+  bulletsInGame = 0;
+  isEnd = false;
+
+  bgBlack = this.add.image(450, 1500, 'bgBlack').setVisible(false);
+
+  endPanel = this.add.image(450, 400, 'endPanel').setVisible(false).setScale(0.6);
+
+  txtEndScore = this.add.text(500, 452, actualScore, { fill: '#ffffff' });
+  txtEndScore.align = 'center';
+  txtEndScore.setFontSize(50);
+  txtEndScore.setFontFamily('font1');
+  txtEndScore.setVisible(false);
   // ===========================================================
 }
 
 
 function update()
 {
-
+  
 }
 
 
@@ -333,11 +411,59 @@ function CalculateBallPos(pointer)
 }
 
 
+// TIMER FUNCTION
+// Animate text when add a ball (increase)
+function TIncreaseText(txt)
+{
+  txt.setScale(txt.scale + 0.05);
+}
+
+
+// TIMER FUNCTION
+// Animate text when add a ball (decrease)
+function TDecreaseText(txt)
+{
+  txt.setScale(txt.scale - 0.05);
+}
+
+
+// TIMER FUNCTION
+// Animate text when add a ball (decrease)
+function TDecreaseTextScore(txt)
+{
+  txt.setScale(txt.scale - 0.1);
+
+  if(txt.scale <= 0.98)
+  {
+    isTextScoreOnAnim = false;
+    txt.setScale(1);
+  }
+}
+
+
 // Add a mun
 function AddBall()
 {
   remainingMun = remainingMun + 1;
   txtMun.setText('X ' + remainingMun);
+}
+
+
+// TIMER FUNCTION
+// Animate AddOne
+function TAnimateAddOne()
+{
+  addOne.setAlpha(addOne.alpha - 0.05);
+  addOne.setY(addOne.y - 3);
+}
+
+
+// TIMER FUNCTION
+// Setup AddOne
+function TSetupAddOne()
+{
+  addOne.setAlpha(0);
+  addOne.setPosition(210, 140);
 }
 
 
@@ -384,7 +510,7 @@ function TStopParticlesDestroyHextech()
 // Reduce the alpha of particle sprite
 function TReduceParticleAlphaDestroyHextech()
 {
-  emitterHextechDestroy.setAlpha(emitterHextechDestroy.alpha.propertyValue - 0.04);
+  emitterHextechDestroy.setAlpha(emitterHextechDestroy.alpha.propertyValue - 0.08);
 }
 
 
@@ -408,7 +534,7 @@ function SpawnHextechParticlesDestroy(posX, posY, ptc)
   emitterHextechDestroy.setPosition(posX, posY);
   emitterHextechDestroy.setSpeed(250);
   emitterHextechDestroy.setBlendMode(Phaser.BlendModes.ADD);
-  emitterHextechDestroy.setQuantity(50);
+  emitterHextechDestroy.setQuantity(100);
   emitterHextechDestroy.setGravityY(900);
 }
 
@@ -442,7 +568,16 @@ function TFillHextechBar()
   {
     valueHextechBar = 0;
     barHextech01.setScale(1, 0);
+
+    increaseText = this.time.addEvent({ delay: 5, callback: TIncreaseText, args: [txtMun], callbackScope: this, repeat: 5});
+    decreaseText = this.time.addEvent({ delay: 25, callback: TDecreaseText, args: [txtMun], callbackScope: this, repeat: 5});
+
     AddBall();
+    this.sound.play('addOneSong');
+
+    addOne.setAlpha(1);
+    animateAddOne = this.time.addEvent({ delay: 50, callback: TAnimateAddOne, callbackScope: this, repeat: 20});
+    setupAddOne = this.time.addEvent({ delay: 1000, callback: TSetupAddOne, callbackScope: this});
   }
 }
 
@@ -458,10 +593,26 @@ function HitHextech(hextechBall, hextechBlock)
   animDestroyHextechBlock = this.time.addEvent({ delay: 1, callback: TAnimDestroyBlock, args: [hextechBlock], callbackScope: this, repeat: 50});
   dispawnHextechBlock = this.time.addEvent({ delay: 51, callback: TDispawnBlock, args: [hextechBlock], callbackScope: this});
 
-  reduceParticleAlphaDestroyHextech = this.time.addEvent({ delay: 1, callback: TReduceParticleAlphaDestroyHextech, callbackScope: this, repeat : 12});
-  stopParticlesDestroyHextech = this.time.addEvent({ delay: 13, callback: TStopParticlesDestroyHextech, callbackScope: this});
+  reduceParticleAlphaDestroyHextech = this.time.addEvent({ delay: 1, callback: TReduceParticleAlphaDestroyHextech, callbackScope: this, repeat : 9});
+  stopParticlesDestroyHextech = this.time.addEvent({ delay: 10, callback: TStopParticlesDestroyHextech, callbackScope: this});
 
   fillHextechBar = this.time.addEvent({ delay: 1, callback:TFillHextechBar, callbackScope: this, repeat: 25});
+
+  AddScore();
+  if(!isTextScoreOnAnim)
+  {
+    isTextScoreOnAnim = true;
+    increaseTextScore = this.time.addEvent({ delay: 5, callback: TIncreaseText, args: [txtScore], callbackScope: this, repeat: 10});
+    decreaseTextScore = this.time.addEvent({ delay: 50, callback: TDecreaseTextScore, args: [txtScore], callbackScope: this, repeat: 5});
+  }
+
+  hextechBlock.setName("isDead");
+
+  if(CheckRow())
+  {
+    approachBlock = this.time.addEvent({ delay: 1, callback: TMoveBlocks, callbackScope: this, repeat: 50});
+    numberRow++;
+  }
 }
 
 
@@ -471,6 +622,8 @@ function FailHextech(hextechBall, shimmerBlock)
   this.sound.play('destroyBall');
   shimmerBlock.setScale(shimmerBlock.scaleX + 0.1, shimmerBlock.scaleY + 0.1);
   hextechBall.disableBody(true, true);
+
+  bulletsInGame--;
 }
 
 
@@ -500,7 +653,7 @@ function TStopParticlesDestroyShimmer()
 // Reduce the alpha of particle sprite
 function TReduceParticleAlphaDestroyShimmer()
 {
-  emitterShimmerDestroy.setAlpha(emitterShimmerDestroy.alpha.propertyValue - 0.04);
+  emitterShimmerDestroy.setAlpha(emitterShimmerDestroy.alpha.propertyValue - 0.08);
 }
 
 
@@ -524,7 +677,7 @@ function SpawnShimmerParticlesDestroy(posX, posY, ptc)
   emitterShimmerDestroy.setPosition(posX, posY);
   emitterShimmerDestroy.setSpeed(250);
   emitterShimmerDestroy.setBlendMode(Phaser.BlendModes.ADD);
-  emitterShimmerDestroy.setQuantity(50);
+  emitterShimmerDestroy.setQuantity(100);
   emitterShimmerDestroy.setGravityY(900);
 }
 
@@ -558,7 +711,16 @@ function TFillShimmerBar()
   {
     valueShimmerBar = 0;
     barShimmer01.setScale(1, 0);
+
+    increaseText = this.time.addEvent({ delay: 5, callback: TIncreaseText, args: [txtMun], callbackScope: this, repeat: 5});
+    decreaseText = this.time.addEvent({ delay: 25, callback: TDecreaseText, args: [txtMun], callbackScope: this, repeat: 5});
+
     AddBall();
+    this.sound.play('addOneSong');
+
+    addOne.setAlpha(1);
+    animateAddOne = this.time.addEvent({ delay: 50, callback: TAnimateAddOne, callbackScope: this, repeat: 20});
+    setupAddOne = this.time.addEvent({ delay: 1000, callback: TSetupAddOne, callbackScope: this});
   }
 }
 
@@ -574,10 +736,26 @@ function HitShimmer(shimmerBall, shimmerBlock)
   animDestroyShimmerBlock = this.time.addEvent({ delay: 1, callback: TAnimDestroyBlock, args: [shimmerBlock], callbackScope: this, repeat: 50});
   dispawnShimmerBlock = this.time.addEvent({ delay: 51, callback: TDispawnBlock, args: [shimmerBlock], callbackScope: this});
 
-  reduceParticleAlphaDestroyShimmer = this.time.addEvent({ delay: 1, callback: TReduceParticleAlphaDestroyShimmer, callbackScope: this, repeat : 12});
-  stopParticlesDestroyShimmer = this.time.addEvent({ delay: 13, callback: TStopParticlesDestroyShimmer, callbackScope: this});
+  reduceParticleAlphaDestroyShimmer = this.time.addEvent({ delay: 1, callback: TReduceParticleAlphaDestroyShimmer, callbackScope: this, repeat : 9});
+  stopParticlesDestroyShimmer = this.time.addEvent({ delay: 10, callback: TStopParticlesDestroyShimmer, callbackScope: this});
 
   fillShimmerBar = this.time.addEvent({ delay: 1, callback:TFillShimmerBar, callbackScope: this, repeat: 25});
+
+  AddScore();
+  if(!isTextScoreOnAnim)
+  {
+    isTextScoreOnAnim = true;
+    increaseTextScore = this.time.addEvent({ delay: 5, callback: TIncreaseText, args: [txtScore], callbackScope: this, repeat: 10});
+    decreaseTextScore = this.time.addEvent({ delay: 50, callback: TDecreaseTextScore, args: [txtScore], callbackScope: this, repeat: 5});
+  }
+
+  shimmerBlock.setName("isDead");
+
+  if(CheckRow())
+  {
+    approachBlock = this.time.addEvent({ delay: 1, callback: TMoveBlocks, callbackScope: this, repeat: 50});
+    numberRow++;
+  }
 }
 
 
@@ -587,6 +765,8 @@ function FailShimmer(shimmerBall, hextechBlock)
   this.sound.play('destroyBall');
   hextechBlock.setScale(hextechBlock.scaleX + 0.1, hextechBlock.scaleY + 0.1);
   shimmerBall.disableBody(true, true);
+
+  bulletsInGame--;
 }
 
 
@@ -637,27 +817,380 @@ function UpdateLoader()
  // Level design
  function SetupLevelDesign()
  {
+  var row01 = [];
   hextechBlocks.create(100, 400, 'brickHextech');
+  Phaser.Utils.Array.Add(row01, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
   hextechBlocks.create(250, 400, 'brickHextech');
+  Phaser.Utils.Array.Add(row01, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
   shimmerBlocks.create(400, 400, 'brickShimmer');
+  Phaser.Utils.Array.Add(row01, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
   hextechBlocks.create(550, 400, 'brickHextech');
+  Phaser.Utils.Array.Add(row01, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
   shimmerBlocks.create(700, 400, 'brickShimmer');
+  Phaser.Utils.Array.Add(row01, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
 
+  var row02 = [];
   shimmerBlocks.create(175, 500, 'brickShimmer');
+  Phaser.Utils.Array.Add(row02, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
   shimmerBlocks.create(325, 500, 'brickShimmer');
+  Phaser.Utils.Array.Add(row02, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
   hextechBlocks.create(475, 500, 'brickHextech');
+  Phaser.Utils.Array.Add(row02, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
   hextechBlocks.create(625, 500, 'brickHextech');
+  Phaser.Utils.Array.Add(row02, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
   shimmerBlocks.create(775, 500, 'brickShimmer');
+  Phaser.Utils.Array.Add(row02, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
 
+  var row03 = [];
   shimmerBlocks.create(100, 600, 'brickShimmer');
+  Phaser.Utils.Array.Add(row03, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
   hextechBlocks.create(250, 600, 'brickHextech');
+  Phaser.Utils.Array.Add(row03, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
   hextechBlocks.create(400, 600, 'brickHextech');
+  Phaser.Utils.Array.Add(row03, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
   hextechBlocks.create(550, 600, 'brickHextech');
+  Phaser.Utils.Array.Add(row03, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
   shimmerBlocks.create(700, 600, 'brickShimmer');
+  Phaser.Utils.Array.Add(row03, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
 
+  var row04 = [];
   hextechBlocks.create(175, 700, 'brickHextech');
+  Phaser.Utils.Array.Add(row04, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
   shimmerBlocks.create(325, 700, 'brickShimmer');
+  Phaser.Utils.Array.Add(row04, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
   shimmerBlocks.create(475, 700, 'brickShimmer');
+  Phaser.Utils.Array.Add(row04, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
   shimmerBlocks.create(625, 700, 'brickShimmer');
+  Phaser.Utils.Array.Add(row04, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
   hextechBlocks.create(775, 700, 'brickHextech');
+  Phaser.Utils.Array.Add(row04, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+
+  var row05 = [];
+  hextechBlocks.create(100, 800, 'brickHextech');
+  Phaser.Utils.Array.Add(row05, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(250, 800, 'brickShimmer');
+  Phaser.Utils.Array.Add(row05, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(400, 800, 'brickShimmer');
+  Phaser.Utils.Array.Add(row05, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(550, 800, 'brickHextech');
+  Phaser.Utils.Array.Add(row05, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(700, 800, 'brickHextech');
+  Phaser.Utils.Array.Add(row05, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+
+  var row06 = [];
+  shimmerBlocks.create(175, 900, 'brickShimmer');
+  Phaser.Utils.Array.Add(row06, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(325, 900, 'brickHextech');
+  Phaser.Utils.Array.Add(row06, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(475, 900, 'brickHextech');
+  Phaser.Utils.Array.Add(row06, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(625, 900, 'brickShimmer');
+  Phaser.Utils.Array.Add(row06, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(775, 900, 'brickShimmer');
+  Phaser.Utils.Array.Add(row06, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+
+  var row07 = [];
+  shimmerBlocks.create(100, 1000, 'brickShimmer');
+  Phaser.Utils.Array.Add(row07, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(250, 1000, 'brickHextech');
+  Phaser.Utils.Array.Add(row07, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(400, 1000, 'brickShimmer');
+  Phaser.Utils.Array.Add(row07, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(550, 1000, 'brickHextech');
+  Phaser.Utils.Array.Add(row07, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(700, 1000, 'brickHextech');
+  Phaser.Utils.Array.Add(row06, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+
+  var row08 = [];
+  shimmerBlocks.create(175, 1100, 'brickShimmer');
+  Phaser.Utils.Array.Add(row08, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(325, 1100, 'brickShimmer');
+  Phaser.Utils.Array.Add(row08, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(475, 1100, 'brickHextech');
+  Phaser.Utils.Array.Add(row08, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(625, 1100, 'brickShimmer');
+  Phaser.Utils.Array.Add(row08, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(775, 1100, 'brickHextech');
+  Phaser.Utils.Array.Add(row08, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+
+  var row09 = [];
+  hextechBlocks.create(100, 1200, 'brickHextech');
+  Phaser.Utils.Array.Add(row09, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(250, 1200, 'brickHextech');
+  Phaser.Utils.Array.Add(row09, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(400, 1200, 'brickShimmer');
+  Phaser.Utils.Array.Add(row09, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(550, 1200, 'brickHextech');
+  Phaser.Utils.Array.Add(row09, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(700, 1200, 'brickShimmer');
+  Phaser.Utils.Array.Add(row09, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+
+  var row10 = [];
+  hextechBlocks.create(175, 1300, 'brickHextech');
+  Phaser.Utils.Array.Add(row10, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(325, 1300, 'brickHextech');
+  Phaser.Utils.Array.Add(row10, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(475, 1300, 'brickShimmer');
+  Phaser.Utils.Array.Add(row10, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(625, 1300, 'brickShimmer');
+  Phaser.Utils.Array.Add(row10, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(775, 1300, 'brickShimmer');
+  Phaser.Utils.Array.Add(row10, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+
+  var row11 = [];
+  hextechBlocks.create(100, 1400, 'brickHextech').setScale(1).refreshBody();
+  Phaser.Utils.Array.Add(row11, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(250, 1400, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row11, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(400, 1400, 'brickShimmer').setScale(1.4).refreshBody();
+  Phaser.Utils.Array.Add(row11, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(550, 1400, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row11, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(700, 1400, 'brickHextech').setScale(1).refreshBody();
+  Phaser.Utils.Array.Add(row11, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+
+  var row12 = [];
+  shimmerBlocks.create(175, 1500, 'brickShimmer').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row12, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(325, 1500, 'brickShimmer').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row12, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(475, 1500, 'brickShimmer').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row12, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(625, 1500, 'brickShimmer').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row12, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(775, 1500, 'brickHextech').setScale(1.4).refreshBody();
+  Phaser.Utils.Array.Add(row12, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+
+  var row13 = [];
+  shimmerBlocks.create(100, 1600, 'brickShimmer').setScale(1.4).refreshBody();
+  Phaser.Utils.Array.Add(row13, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(250, 1600, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row13, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(400, 1600, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row13, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(550, 1600, 'brickShimmer').setScale(1.4).refreshBody();
+  Phaser.Utils.Array.Add(row13, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(700, 1600, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row13, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+
+  var row14 = [];
+  hextechBlocks.create(175, 1700, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row14, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(325, 1700, 'brickShimmer').setScale(1.4).refreshBody();
+  Phaser.Utils.Array.Add(row14, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(475, 1700, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row14, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(625, 1700, 'brickShimmer').setScale(1.4).refreshBody();
+  Phaser.Utils.Array.Add(row14, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(775, 1700, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row14, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+
+  var row15 = [];
+  shimmerBlocks.create(100, 1800, 'brickShimmer').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row15, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(250, 1800, 'brickHextech').setScale(1.4).refreshBody();
+  Phaser.Utils.Array.Add(row15, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(400, 1800, 'brickShimmer').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row15, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(550, 1800, 'brickHextech').setScale(1.4).refreshBody();
+  Phaser.Utils.Array.Add(row15, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(700, 1800, 'brickShimmer').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row15, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+
+  var row16 = [];
+  shimmerBlocks.create(175, 1900, 'brickShimmer').setScale(1.4).refreshBody();
+  Phaser.Utils.Array.Add(row16, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(325, 1900, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row16, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(475, 1900, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row16, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(625, 1900, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row16, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(775, 1900, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row16, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+
+  var row17 = [];
+  shimmerBlocks.create(100, 2000, 'brickShimmer').setScale(1).refreshBody();
+  Phaser.Utils.Array.Add(row17, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(250, 2000, 'brickShimmer').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row17, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(400, 2000, 'brickHextech').setScale(1.4).refreshBody();
+  Phaser.Utils.Array.Add(row17, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(550, 2000, 'brickShimmer').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row17, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(700, 2000, 'brickShimmer').setScale(1).refreshBody();
+  Phaser.Utils.Array.Add(row17, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+
+  var row18 = [];
+  hextechBlocks.create(175, 2100, 'brickHextech').setScale(1, 1).refreshBody();
+  Phaser.Utils.Array.Add(row18, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(325, 2100, 'brickShimmer').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row18, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(475, 2100, 'brickHextech').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row18, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(625, 2100, 'brickShimmer').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row18, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(775, 2100, 'brickHextech').setScale(1, 1).refreshBody();
+  Phaser.Utils.Array.Add(row18, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+
+  var row19 = [];
+  hextechBlocks.create(100, 2200, 'brickHextech').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row19, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(250, 2200, 'brickHextech').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row19, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(400, 2200, 'brickShimmer').setScale(1, 1.4).refreshBody();
+  Phaser.Utils.Array.Add(row19, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(550, 2200, 'brickShimmer').setScale(0.8).refreshBody();
+  Phaser.Utils.Array.Add(row19, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(700, 2200, 'brickShimmer').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row19, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+
+  var row20 = [];
+  shimmerBlocks.create(175, 2300, 'brickShimmer').setScale(1, 1.4).refreshBody();
+  Phaser.Utils.Array.Add(row20, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(325, 2300, 'brickShimmer').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row20, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(475, 2300, 'brickHextech').setScale(1.2).refreshBody();
+  Phaser.Utils.Array.Add(row20, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(625, 2300, 'brickHextech').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row20, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(775, 2300, 'brickHextech').setScale(1, 1.4).refreshBody();
+  Phaser.Utils.Array.Add(row20, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+
+  var row21 = [];
+  hextechBlocks.create(100, 2400, 'brickHextech').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row21, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(250, 2400, 'brickShimmer').setScale(0.8, 1.2).refreshBody();
+  Phaser.Utils.Array.Add(row21, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(400, 2400, 'brickHextech').setScale(0.6, 1.4).refreshBody();
+  Phaser.Utils.Array.Add(row21, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(550, 2400, 'brickShimmer').setScale(0.8, 1.2).refreshBody();
+  Phaser.Utils.Array.Add(row21, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(700, 2400, 'brickShimmer').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row21, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+
+  var row22 = [];
+  hextechBlocks.create(125, 2500, 'brickHextech').setScale(0.6, 1.4).refreshBody();
+  Phaser.Utils.Array.Add(row22, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(225, 2500, 'brickShimmer').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row22, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(325, 2500, 'brickHextech').setScale(0.6).refreshBody();
+  Phaser.Utils.Array.Add(row22, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(425, 2500, 'brickShimmer').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row22, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(525, 2500, 'brickHextech').setScale(0.6, 1.4).refreshBody();
+  Phaser.Utils.Array.Add(row22, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(625, 2500, 'brickShimmer').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row22, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(725, 2500, 'brickHextech').setScale(0.6).refreshBody();
+  Phaser.Utils.Array.Add(row22, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(825, 2500, 'brickShimmer').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row22, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+
+  var row23 = [];
+  hextechBlocks.create(100, 2600, 'brickHextech').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row23, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(200, 2600, 'brickHextech').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row23, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(300, 2600, 'brickHextech').setScale(0.6).refreshBody();
+  Phaser.Utils.Array.Add(row23, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(400, 2600, 'brickShimmer').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row23, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(500, 2600, 'brickHextech').setScale(0.6).refreshBody();
+  Phaser.Utils.Array.Add(row23, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(600, 2600, 'brickShimmer').setScale(0.6, 1.4).refreshBody();
+  Phaser.Utils.Array.Add(row23, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(700, 2600, 'brickShimmer').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row23, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(800, 2600, 'brickShimmer').setScale(0.6).refreshBody();
+  Phaser.Utils.Array.Add(row23, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+
+  var row24 = [];
+  shimmerBlocks.create(125, 2700, 'brickShimmer').setScale(0.6, 1.4).refreshBody();
+  Phaser.Utils.Array.Add(row24, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(225, 2700, 'brickHextech').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row24, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(425, 2700, 'brickShimmer').setScale(1.8, 1.4).refreshBody();
+  Phaser.Utils.Array.Add(row24, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  shimmerBlocks.create(625, 2700, 'brickShimmer').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row24, shimmerBlocks.children.entries[shimmerBlocks.children.entries.length - 1]);
+  hextechBlocks.create(725, 2700, 'brickHextech').setScale(0.6).refreshBody();
+  Phaser.Utils.Array.Add(row24, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+  hextechBlocks.create(825, 2700, 'brickHextech').setScale(0.6, 1).refreshBody();
+  Phaser.Utils.Array.Add(row24, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
+
+  rowRows = [row01, row02, row03, row04, row05, row06, row07, row08, row09, row10, row11, row12, row13, row14, row15, row16, row17, row18, row19, row20, row21, row22, row23, row24];
+ }
+
+
+ // Singed has 10% chance to laugh
+ function LaughSinged(game)
+ {
+  var chance = Phaser.Math.Between(0, 13);
+
+  if(chance == 0)
+  {
+    game.sound.play('laugh');
+  }
+ }
+
+
+ // Add score
+ function AddScore()
+ {
+  actualScore = actualScore + 100;
+  txtScore.setText(actualScore);
+  txtEndScore.setText(actualScore);
+ }
+
+
+ // TIMER FUNCTION
+ // Move blocks with times
+ function TMoveBlocks()
+ {
+  for (var i = 0; i < hextechBlocks.children.entries.length; i++) 
+  {
+    hextechBlocks.children.entries[i].y -= 2;
+    hextechBlocks.children.entries[i].refreshBody();
+  }
+
+  for (var j = 0; j < shimmerBlocks.children.entries.length; j++) 
+  {
+    shimmerBlocks.children.entries[j].y -= 2;
+    shimmerBlocks.children.entries[j].refreshBody();
+  }
+
+  bg.y -= 2;
+  bgCollider.y -= 2;
+  bgCollider.refreshBody();
+ }
+
+
+ function CheckRow()
+ {
+  var tempCanApproach = 1;
+  var tempArray = rowRows[numberRow];
+
+  for (var i = 0; i < tempArray.length; i++)
+  {
+    if(tempArray[i].name != "isDead")
+    {
+      tempCanApproach = 0;
+    }
+  }
+  
+  return tempCanApproach;
+ }
+
+
+  // TIMER FUNCTION
+ // Increase scale of end panel
+ function TIncreaseEndPanel()
+ {
+  endPanel.setScale(endPanel.scale + 0.01);
+
+  if(endPanel.scale > 1.18)
+  {
+    txtEndScore.setVisible(true);
+  }
  }
