@@ -35,9 +35,11 @@ var hextechBlocks;
 var shimmerBlocks;
 var hextechBalls;
 var shimmerBalls;
-var groupPtcHextechDestroy;
-var groupPtcShimmerDestroy;
 var bgColliders;
+var runesResources;
+var runesDamage;
+var runesIncrease;
+var runesDecrease;
 // -------------------------------------
 
 // ------------ GAME OBJECTS -----------
@@ -61,6 +63,8 @@ var bgCollider;
 var endPanel;
 var txtEndScore;
 var bgBlack;
+var startPanel;
+var txtPlay;
 // -------------------------------------
 
 // ------------ TIMED EVENT ------------
@@ -82,6 +86,11 @@ var decreaseTextScore;
 var approachBlock;
 var destroyParticlesEachTime;
 var increaseEndPanel;
+var decreaseAlphaText;
+var increaseAlphaText;
+var pauseAlphaText;
+var increaseRune;
+var decreaseRune;
 // -------------------------------------
 
 // ------------ PARTICLES --------------
@@ -106,6 +115,13 @@ var numberRow;
 var rowRows;
 var bulletsInGame;
 var isEnd;
+var spaceBar;
+var isStart;
+var mainTheme;
+var stateAlphaText;
+var blocksInGame;
+var canSpawnPtcHextech;
+var canSpawnPtcShimmer;
 // -------------------------------------
 
 // ===================================================
@@ -118,6 +134,7 @@ function preload ()
     this.load.image('bgCollider', 'assets/images/BGCollider.png');
     this.load.image('endPanel', 'assets/images/EndPanel.png');
     this.load.image('bgBlack', 'assets/images/BGBlack.png');
+    this.load.image('startPanel', 'assets/images/StartPanel.png');
 
     // Cannon's assets
     this.load.spritesheet('cannon01', 'assets/images/Cannon01.png',
@@ -169,12 +186,38 @@ function preload ()
       { frameWidth: 32, frameHeight: 128 }
     );
     this.load.image('addOne', 'assets/images/AddOne.png');
+
+    // Rune's assets
+    this.load.image('runeResources', 'assets/images/RuneResources.png');
+    this.load.spritesheet('runeResourcesSheet', 'assets/images/RuneResourcesSheet.png',
+      { frameWidth: 75, frameHeight: 98 }
+    );
+    this.load.image('runeDamage', 'assets/images/RuneDamage.png');
+    this.load.spritesheet('runeDamageSheet', 'assets/images/RuneDamageSheet.png',
+      { frameWidth: 63, frameHeight: 91 }
+    );
+    this.load.image('runeIncrease', 'assets/images/RuneIncrease.png');
+    this.load.spritesheet('runeIncreaseSheet', 'assets/images/RuneIncreaseSheet.png',
+      { frameWidth: 100, frameHeight: 100 }
+    );
+    this.load.image('runeDecrease', 'assets/images/RuneDecrease.png');
+    this.load.spritesheet('runeDecreaseSheet', 'assets/images/RuneDecreaseSheet.png',
+      { frameWidth: 97, frameHeight: 83 }
+    );
 }
 
 
 function create ()
 {
-  this.sound.play('mainTheme');
+  // Initialize start state
+  spaceBar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+  isStart = false;
+
+  // Initialize main theme
+  mainTheme = this.sound.add('mainTheme', {volume: 0.2});
+  mainTheme.play();
+
+  // Initialize differents backgrounds
   bg = this.add.image(450, 4500, 'bg');
   bgColliders = this.physics.add.staticGroup();
   bgCollider = bgColliders.create(450, 2800, 'bgCollider');
@@ -182,9 +225,11 @@ function create ()
   // ================== INITIALIZE PARTICLES ===================
   var particlesHextech = this.add.particles('ptcHextechShoot');
   var particlesShimmer = this.add.particles('ptcShimmerShoot');
+  canSpawnPtcHextech = true;
+  canSpawnPtcShimmer = true;
   // ===========================================================
 
-
+  // Initialize cannon
   gearBottom = this.add.image(450, 100, 'cannon03');
 
   cannon = this.physics.add.sprite(450, 100, 'cannonIdle').setOrigin(0.51, 0.97);
@@ -202,7 +247,7 @@ function create ()
 
   // ================== SHOOT ==================================
   this.input.on('pointerdown', function (pointer) {
-    if(remainingMun > 0)
+    if(remainingMun > 0 && isStart)
     {
       bulletsInGame++;
       this.sound.play('shoot');
@@ -226,8 +271,16 @@ function create ()
       UpdateLoader();
       LaughSinged(this);
     }
-    else if(bulletsInGame == 0 && isEnd == false)
+    else if((bulletsInGame == 0 || blocksInGame == 0) && isEnd == false && isStart)
     {
+      endPanel = this.add.image(450, 400, 'endPanel').setVisible(false).setScale(0.6);
+
+      txtEndScore = this.add.text(500, 452, actualScore, { fill: '#ffffff' });
+      txtEndScore.align = 'center';
+      txtEndScore.setFontSize(50);
+      txtEndScore.setFontFamily('font1');
+      txtEndScore.setVisible(false);
+
       isEnd = true;
       bgBlack.setVisible(true);
       endPanel.setVisible(true);
@@ -314,8 +367,6 @@ function create ()
   txtMun.setFontFamily('font1');
   // ===========================================================
 
-  groupPtcShimmerDestroy = this.physics.add.group();
-  groupPtcHextechDestroy = this.physics.add.group();
 
   // ================== BARS ===================================
   barHextech01 = this.physics.add.sprite(300, 150, 'barHextech01').setOrigin(0.5, 1).setScale(1, 0.5);
@@ -362,26 +413,83 @@ function create ()
   // ===========================================================
 
 
+  // ================= RUNES ===================================
+  runesResources = this.physics.add.group();
+  this.physics.add.overlap(runesResources, hextechBalls, MakeResources, null, this);
+  this.physics.add.overlap(runesResources, shimmerBalls, MakeResources, null, this);
+
+  this.anims.create({
+    key: 'resources',
+    frames: this.anims.generateFrameNumbers('runeResourcesSheet', { start: 0, end: 4 }),
+    frameRate: 32,
+    repeat: -1
+  });
+
+  runesDamage = this.physics.add.group();
+  this.physics.add.overlap(runesDamage, hextechBalls, MakeDamage, null, this);
+  this.physics.add.overlap(runesDamage, shimmerBalls, MakeDamage, null, this);
+
+  this.anims.create({
+    key: 'damage',
+    frames: this.anims.generateFrameNumbers('runeDamageSheet', { start: 0, end: 4 }),
+    frameRate: 32,
+    repeat: -1
+  });
+
+  runesIncrease = this.physics.add.group();
+  this.physics.add.overlap(runesIncrease, hextechBalls, MakeIncrease, null, this);
+  this.physics.add.overlap(runesIncrease, shimmerBalls, MakeIncrease, null, this);
+
+  this.anims.create({
+    key: 'increase',
+    frames: this.anims.generateFrameNumbers('runeIncreaseSheet', { start: 0, end: 4 }),
+    frameRate: 32,
+    repeat: -1
+  });
+
+  runesDecrease = this.physics.add.group();
+  this.physics.add.overlap(runesDecrease, hextechBalls, MakeDecrease, null, this);
+  this.physics.add.overlap(runesDecrease, shimmerBalls, MakeDecrease, null, this);
+
+  this.anims.create({
+    key: 'decrease',
+    frames: this.anims.generateFrameNumbers('runeDecreaseSheet', { start: 0, end: 4 }),
+    frameRate: 32,
+    repeat: -1
+  });
+  // ===========================================================
+
+
   // ================== END PANEL ==============================
   bulletsInGame = 0;
   isEnd = false;
 
-  bgBlack = this.add.image(450, 1500, 'bgBlack').setVisible(false);
+  bgBlack = this.add.image(450, 1500, 'bgBlack');
 
-  endPanel = this.add.image(450, 400, 'endPanel').setVisible(false).setScale(0.6);
+  startPanel = this.add.image(450, 400, 'startPanel').setScale(1.2);
 
-  txtEndScore = this.add.text(500, 452, actualScore, { fill: '#ffffff' });
-  txtEndScore.align = 'center';
-  txtEndScore.setFontSize(50);
-  txtEndScore.setFontFamily('font1');
-  txtEndScore.setVisible(false);
+  txtPlay = this.add.text(235, 405, "Press Space to Play", { fill: '#ffffff' });
+  txtPlay.setFontSize(50);
+  txtPlay.setFontFamily('font1');
+  decreaseAlphaText = this.time.addEvent({ delay: 5, callback: TDecreaseAlphaText, args: [this], callbackScope: this, repeat: 20});
+  stateAlphaText = 1;
   // ===========================================================
 }
 
 
 function update()
 {
-  
+  if(Phaser.Input.Keyboard.JustDown(spaceBar))
+  {
+    if(isStart == false)
+    {
+      isStart = true;
+      bgBlack.setVisible(false);
+      mainTheme.volume = 1;
+      startPanel.setVisible(false);
+      txtPlay.setVisible(false);
+    }
+  }
 }
 
 
@@ -504,6 +612,7 @@ function TReduceParticleAlphaShootHextech()
 function TStopParticlesDestroyHextech()
 {
   emitterHextechDestroy.stop();
+  canSpawnPtcHextech = true;
 }
 
 // TIMER FUNCTION
@@ -585,18 +694,25 @@ function TFillHextechBar()
 // Hextech ball hit hextech brick
 function HitHextech(hextechBall, hextechBlock)
 {
+  blocksInGame--;
   this.cameras.main.shake(50, 0.005); // Camera Shake (duration, power)
   this.sound.play('destroyHextech');
   var particlesHextechDestroy = this.add.particles('ptcHextechDestroy');
-  SpawnHextechParticlesDestroy(hextechBlock.x, hextechBlock.y, particlesHextechDestroy);
+  if(canSpawnPtcHextech)
+  {
+    SpawnHextechParticlesDestroy(hextechBlock.x, hextechBlock.y, particlesHextechDestroy);
+    canSpawnPtcHextech = false;
+  }
 
   animDestroyHextechBlock = this.time.addEvent({ delay: 1, callback: TAnimDestroyBlock, args: [hextechBlock], callbackScope: this, repeat: 50});
   dispawnHextechBlock = this.time.addEvent({ delay: 51, callback: TDispawnBlock, args: [hextechBlock], callbackScope: this});
 
-  reduceParticleAlphaDestroyHextech = this.time.addEvent({ delay: 1, callback: TReduceParticleAlphaDestroyHextech, callbackScope: this, repeat : 9});
-  stopParticlesDestroyHextech = this.time.addEvent({ delay: 10, callback: TStopParticlesDestroyHextech, callbackScope: this});
+  reduceParticleAlphaDestroyHextech = this.time.addEvent({ delay: 1, callback: TReduceParticleAlphaDestroyHextech, callbackScope: this, repeat : 7});
+  stopParticlesDestroyHextech = this.time.addEvent({ delay: 9, callback: TStopParticlesDestroyHextech, callbackScope: this});
 
   fillHextechBar = this.time.addEvent({ delay: 1, callback:TFillHextechBar, callbackScope: this, repeat: 25});
+
+  SpawnRune(hextechBlock);
 
   AddScore();
   if(!isTextScoreOnAnim)
@@ -647,6 +763,7 @@ function TReduceParticleAlphaShootShimmer()
 function TStopParticlesDestroyShimmer()
 {
   emitterShimmerDestroy.stop();
+  canSpawnPtcShimmer = true;
 }
 
 // TIMER FUNCTION
@@ -728,18 +845,25 @@ function TFillShimmerBar()
 // Shimmer ball hit shimmer brick
 function HitShimmer(shimmerBall, shimmerBlock)
 {
+  blocksInGame--;
   this.cameras.main.shake(50, 0.005); // Camera Shake (duration, power)
   this.sound.play('destroyShimmer');
   var particlesShimmerDestroy = this.add.particles('ptcShimmerDestroy');
-  SpawnShimmerParticlesDestroy(shimmerBlock.x, shimmerBlock.y, particlesShimmerDestroy)
+  if(canSpawnPtcShimmer)
+  {
+    SpawnShimmerParticlesDestroy(shimmerBlock.x, shimmerBlock.y, particlesShimmerDestroy)
+    canSpawnPtcShimmer = false;
+  }
 
   animDestroyShimmerBlock = this.time.addEvent({ delay: 1, callback: TAnimDestroyBlock, args: [shimmerBlock], callbackScope: this, repeat: 50});
   dispawnShimmerBlock = this.time.addEvent({ delay: 51, callback: TDispawnBlock, args: [shimmerBlock], callbackScope: this});
 
-  reduceParticleAlphaDestroyShimmer = this.time.addEvent({ delay: 1, callback: TReduceParticleAlphaDestroyShimmer, callbackScope: this, repeat : 9});
-  stopParticlesDestroyShimmer = this.time.addEvent({ delay: 10, callback: TStopParticlesDestroyShimmer, callbackScope: this});
+  reduceParticleAlphaDestroyShimmer = this.time.addEvent({ delay: 1, callback: TReduceParticleAlphaDestroyShimmer, callbackScope: this, repeat : 7});
+  stopParticlesDestroyShimmer = this.time.addEvent({ delay: 9, callback: TStopParticlesDestroyShimmer, callbackScope: this});
 
   fillShimmerBar = this.time.addEvent({ delay: 1, callback:TFillShimmerBar, callbackScope: this, repeat: 25});
+
+  SpawnRune(shimmerBlock);
 
   AddScore();
   if(!isTextScoreOnAnim)
@@ -1120,13 +1244,14 @@ function UpdateLoader()
   Phaser.Utils.Array.Add(row24, hextechBlocks.children.entries[hextechBlocks.children.entries.length - 1]);
 
   rowRows = [row01, row02, row03, row04, row05, row06, row07, row08, row09, row10, row11, row12, row13, row14, row15, row16, row17, row18, row19, row20, row21, row22, row23, row24];
+  blocksInGame = 127;
  }
 
 
  // Singed has 10% chance to laugh
  function LaughSinged(game)
  {
-  var chance = Phaser.Math.Between(0, 13);
+  var chance = Phaser.Math.Between(0, 20);
 
   if(chance == 0)
   {
@@ -1140,7 +1265,9 @@ function UpdateLoader()
  {
   actualScore = actualScore + 100;
   txtScore.setText(actualScore);
-  txtEndScore.setText(actualScore);
+
+  if(txtEndScore != null)
+    txtEndScore.setText(actualScore);
  }
 
 
@@ -1158,6 +1285,30 @@ function UpdateLoader()
   {
     shimmerBlocks.children.entries[j].y -= 2;
     shimmerBlocks.children.entries[j].refreshBody();
+  }
+
+  for (var k = 0; k < runesResources.children.entries.length; k++) 
+  {
+    runesResources.children.entries[k].y -= 2;
+    runesResources.children.entries[k].refreshBody();
+  }
+
+  for (var l = 0; l < runesDamage.children.entries.length; l++) 
+  {
+    runesDamage.children.entries[l].y -= 2;
+    runesDamage.children.entries[l].refreshBody();
+  }
+
+  for (var m = 0; m < runesIncrease.children.entries.length; m++) 
+  {
+    runesIncrease.children.entries[m].y -= 2;
+    runesIncrease.children.entries[m].refreshBody();
+  }
+
+  for (var n = 0; n < runesDecrease.children.entries.length; n++) 
+  {
+    runesDecrease.children.entries[n].y -= 2;
+    runesDecrease.children.entries[n].refreshBody();
   }
 
   bg.y -= 2;
@@ -1183,7 +1334,7 @@ function UpdateLoader()
  }
 
 
-  // TIMER FUNCTION
+ // TIMER FUNCTION
  // Increase scale of end panel
  function TIncreaseEndPanel()
  {
@@ -1194,3 +1345,134 @@ function UpdateLoader()
     txtEndScore.setVisible(true);
   }
  }
+
+
+// TIMER FUNCTION
+// Increase alpha text
+function TIncreaseAlphaText(game)
+{
+  txtPlay.setAlpha(txtPlay.alpha + 0.05);
+
+  if(txtPlay.alpha == 1 && stateAlphaText == 0)
+  {
+    stateAlphaText = 1;
+    pauseAlphaText = game.time.addEvent({ delay: 1000, callback: TPauseAlphaText, args: [this], callbackScope: this});
+  }
+}
+
+
+// TIMER FUNCTION
+// Decrease alpha text
+function TDecreaseAlphaText(game)
+{
+  txtPlay.setAlpha(txtPlay.alpha - 0.05);
+
+  if(txtPlay.alpha == 0 && stateAlphaText == 1)
+  {
+    stateAlphaText = 0;
+    increaseAlphaText = game.time.addEvent({ delay: 10, callback: TIncreaseAlphaText, args: [this], callbackScope: this, repeat: 20});
+  }
+}
+
+
+// TIMER FUNCTION
+// Pause alpha text
+function TPauseAlphaText(game)
+{
+  decreaseAlphaText = game.time.addEvent({ delay: 10, callback: TDecreaseAlphaText, args: [this], callbackScope: this, repeat: 20});
+}
+
+
+function SpawnRune(block)
+{
+  var choice = Phaser.Math.Between(0, 15);
+  var xPos = 0;
+  var yPos = 0;
+
+  if(choice <= 3)
+  {
+    xPos = Phaser.Math.Between(block.x - 50, block.x + 50);
+    yPos = Phaser.Math.Between(block.y - 50, block.y + 50);
+  }
+
+  if(choice == 0)
+  {
+    runesResources.create(xPos, yPos, 'runeResources').anims.play('resources', 5, true);
+  }
+  else if(choice == 1)
+  {
+    runesDamage.create(xPos, yPos, 'runeDamage').anims.play('damage', 5, true);;
+  }
+  else if(choice == 2)
+  {
+    runesIncrease.create(xPos, yPos, 'runeIncrease').anims.play('increase', 5, true);;
+  }
+  else if(choice == 3)
+  {
+    runesDecrease.create(xPos, yPos, 'runeDecrease').anims.play('decrease', 5, true);;
+  }
+}
+
+
+function MakeResources(rune, ball)
+{
+  this.sound.play('addOneSong');
+
+  var amount = Phaser.Math.Between(20, 40);
+
+  fillShimmerBar = this.time.addEvent({ delay: 1, callback:TFillShimmerBar, callbackScope: this, repeat: amount});
+  fillHextechBar = this.time.addEvent({ delay: 1, callback:TFillHextechBar, callbackScope: this, repeat: amount});
+
+  rune.disableBody(true, true);
+}
+
+function MakeDamage(rune, ball)
+{
+  this.sound.play('addOneSong');
+
+  var amount = Phaser.Math.Between(1.4, 2);
+
+  ball.setScale(amount, amount);
+
+  rune.disableBody(true, true);
+}
+
+function MakeIncrease(rune, ball)
+{
+  this.sound.play('addOneSong');
+
+  var amount = Phaser.Math.Between(10, 100);
+
+  increaseRune = this.time.addEvent({ delay: 0.5, callback:TIncreaseRune, callbackScope: this, repeat: amount});
+
+  rune.disableBody(true, true);
+}
+
+function MakeDecrease(rune, ball)
+{
+  this.sound.play('addOneSong');
+
+  var amount = Phaser.Math.Between(10, 50);
+
+  decreaseRune = this.time.addEvent({ delay: 0.5, callback:TDecreaseRune, callbackScope: this, repeat: amount});
+
+  rune.disableBody(true, true);
+}
+
+function TIncreaseRune()
+{
+  actualScore = actualScore + 10;
+  txtScore.setText(actualScore);
+
+  if(txtEndScore != null)
+    txtEndScore.setText(actualScore);
+}
+
+function TDecreaseRune()
+{
+  actualScore = actualScore - 10;
+  txtScore.setText(actualScore);
+
+  if(txtEndScore != null)
+    txtEndScore.setText(actualScore);
+}

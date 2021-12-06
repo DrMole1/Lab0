@@ -1,0 +1,17 @@
+#maths01
+{
+	position : absolute;
+	left : 20px;
+	top : 50px;
+	height : 500px;
+	width: 280px;
+}
+
+#maths02
+{
+	position : absolute;
+	right : 20px;
+	top : 50px;
+	height : 500px;
+	width: 280px;
+}
